@@ -18,9 +18,12 @@ import argparse
 import sys
 import requests
 import time
+import datetime
 import csv
 import json
 from elasticsearch import Elasticsearch
+from elasticsearch.helpers import bulk, streaming_bulk
+from ssl import create_default_context
 
 
 def load_args():
@@ -67,7 +70,7 @@ def load_args():
     return parser
 
 
-def load_config(script_name):
+def load_config(path_etc, script_name):
     """Load the configuration file parameters
 
     Input:
@@ -76,7 +79,6 @@ def load_config(script_name):
     Return:
         Config file as a hash.
     """
-    path_etc = os.path.join(os.path.abspath(os.path.dirname(__file__)), "etc")
     config = configparser.ConfigParser()
     config.sections()
     config.read(f'{path_etc}/{script_name}.conf')
@@ -115,13 +117,62 @@ def get_bsm_data(epoch_time):
     return api_result.text
 
 
+def gendata(values_to_elastic):
+    for i in values_to_elastic:
+        try:
+            int(float(i['EpochTime']))
+        except Exception as e:
+            print(e)
+        else:
+            print(f"{i['ProbeName']} - {i['EpochTime']}")
+            # print(int(float(i['EpochTime'])))
+            # print(time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(int(float(i['EpochTime'])))))
+
+            yield {
+                "_index": 'bsm-data',
+                "doc": {"type": "bpm",
+                    "bsm.application.name": i['ApplicationName'],
+                    "bsm.probe.name": i['ProbeName'],
+                    "bsm.probe.status": i['Status'],
+                    "bsm.probe.critical": i['PerfCrit'],
+                    "bsm.probe.minor": i['PerfMinor'],
+                    "bsm.probe.ok": i['PerfOk'],
+                    "bsm.transaction.name": i['TransactionName'],
+                    "bsm.transaction.response_time": i['AvgResponseTime'],
+                    "bsm.transaction.time" : str(int(float(i['EpochTime']))),
+                    "@timestamp": datetime.datetime.utcfromtimestamp(int(float(i['EpochTime'])))
+                }
+            }
+
+
+def open_es():
+    context = create_default_context(
+        cafile=f"{path_etc}/{config['elastic']['ca_cert']}")
+    es = Elasticsearch(
+        [config['elastic']['hostname']],
+        http_auth=(config['elastic']['username'], config['elastic']['password']),
+        scheme=config['elastic']['scheme'],
+        port=config['elastic']['port'],
+        ssl_context=context,
+    )
+    return es
+
+
+def chunks(l, n):
+    # For item i in a range that is a length of l,
+    for i in range(0, len(l), n):
+        # Create an index range for l of n items:
+        yield l[i:i+n]
+
+
 """body
 """
+path_etc = os.path.join(os.path.abspath(os.path.dirname(__file__)), "etc")
 filename = os.path.basename(__file__).split('.')[0]
 epoch_time = int(time.time())
 
 # Import configurations
-config = load_config(filename)
+config = load_config(path_etc, filename)
 
 # load last sent file
 last_file = f"{config['last_value']['path']}/{config['last_value']['file']}"
@@ -133,15 +184,17 @@ except FileNotFoundError:
     print('File does not exist')
     last_values = None
 
-new_last_values = []
-values_to_elastic = []
-
 bsm_csv_data = get_bsm_data(epoch_time)
-count = 0
 csv_reader = csv.DictReader(bsm_csv_data.split("\n"), skipinitialspace=True)
 
+new_last_values = []
+values_to_elastic = []
+count = 0
 for row in csv_reader:
-    print(f"row count = {count}")
+    # print(f"row count = {count}")
+    if row['EpochTime'] is None or "Returned 10000" in row['EpochTime']:
+        # print(row)
+        continue
     count += 1
     if last_values is None or os.stat(last_file).st_size == 0:
         new_last_values.append(f"{row['EpochTime']},{row['ProbeName']}\n")
@@ -152,14 +205,14 @@ for row in csv_reader:
             if not l_val:
                 continue
             l_time, l_probe = l_val.split(',')
-            print(f"{l_time.strip()} -- {row['EpochTime']} : {l_probe.strip()} -- {row['ProbeName']}")
+            # print(f"{l_time.strip()} -- {row['EpochTime']} : {l_probe.strip()} -- {row['ProbeName']}")
             if l_probe.strip() == row['ProbeName'] and l_time.strip() == row['EpochTime']:
                 new_last_values.append(f"{l_time},{l_probe}")
                 found += 1
-                print(f"found last val = {found}")
+                # print(f"found last val = {found}")
                 break
         if found == 0:
-            print(f"no value found = {found}")
+            # print(f"no value found = {found}")
             new_last_values.append(f"{row['EpochTime']},{row['ProbeName']}\n")
             values_to_elastic.append(row)
 
@@ -168,6 +221,7 @@ for row in csv_reader:
 
 last_values.close()
 
+# write values to last value file
 try:
     f = open(last_file, mode='w')
     f.write(''.join(new_last_values))
@@ -177,20 +231,48 @@ except FileNotFoundError:
 
 
 # Push data to elasticsearch
-es = Elasticsearch()
+es = open_es()
 
-
+# print(f"{type(values_to_elastic)}")
+# print(f"{len(values_to_elastic)}")
 
 for i in values_to_elastic:
-    print(f"{i['ProbeName']} - {i['EpochTime']}")
+    # print(i['EpochTime'])
+    try:
+        int(float(i['EpochTime']))
+    except Exception as e:
+        print(e)
+    else:
+        status_ok = 0
+        status_nok = 0
+        # print(f"{i['ProbeName']} - {i['EpochTime']}")
+        # print(int(float(i['EpochTime'])))
+        # print(time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(int(float(i['EpochTime'])))))
+        if "0" in i['Status']:
+            status_ok = 1
+        else:
+            status_nok = 1
+
+        try:
+            es.index(index='bsm-data',
+                body={"type": "bpm",
+                "bsm.application.name": i['ApplicationName'],
+                "bsm.probe.name": i['ProbeName'],
+                "bsm.probe.status": i['Status'],
+                "bsm.probe.status_ok": status_ok,
+                "bsm.probe.status_nok": status_nok,
+                "bsm.probe.critical": i['PerfCrit'],
+                "bsm.probe.minor": i['PerfMinor'],
+                "bsm.probe.ok": i['PerfOk'],
+                "bsm.transaction.name": i['TransactionName'],
+                "bsm.transaction.response_time": i['AvgResponseTime'],
+                "bsm.transaction.time" : str(int(float(i['EpochTime']))),
+                "@timestamp": datetime.datetime.utcfromtimestamp(int(float(i['EpochTime'])))
+                }
+            )
+            es.indices.refresh(index='bsm-data')
+        except Exception as e:
+            print(e)
 
 
 
-
-# print(f"{bsm_csv_data}")
-
-
-# Process the csv return data
-# fieldnames = ("EpochTime","ApplicationName","TransactionName",
-#               "AvgResponseTime","ProbeName","PerfCrit","PerfMinor",
-#               "PerfOk","Status")

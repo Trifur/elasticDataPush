@@ -1,7 +1,10 @@
 from elasticsearch import Elasticsearch
 from ssl import create_default_context
+import os
 
-context = create_default_context(cafile="etc/cert.pem")
+path_etc = os.path.join(os.path.abspath(os.path.dirname(__file__)), "etc")
+
+context = create_default_context(cafile=f"{path_etc}/elastic-stack-ca.crt")
 es = Elasticsearch(
     ['e7359svin2788.resourcestest.internal'],
     http_auth=('logstash_internal', 'Password42!'),
@@ -9,6 +12,10 @@ es = Elasticsearch(
     port=9200,
     ssl_context=context,
 )
+
+print(es.info())
+
+# result = es.get(index="_cluster")
 
 
     #   index => "%{[@metadata][beat]}-%{[@metadata][version]}-%{+YYYY.MM.dd}"
