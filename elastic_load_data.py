@@ -20,6 +20,7 @@ import requests
 import time
 import csv
 import json
+from elasticsearch import Elasticsearch
 
 
 def load_args():
@@ -174,8 +175,14 @@ except FileNotFoundError:
     print('File does not exist')
 
 
+
+# Push data to elasticsearch
+es = Elasticsearch()
+
+
+
 for i in values_to_elastic:
-    print(f"{i['ProbeName']} - {i['EpochTime']})
+    print(f"{i['ProbeName']} - {i['EpochTime']}")
 
 
 
