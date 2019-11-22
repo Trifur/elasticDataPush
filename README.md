@@ -2,11 +2,26 @@
 
 This program is desigend to push data to an elasticsearch instance.
 
+## Table of Contents
+
+
+- [Elastic Data Pusher](#elastic-data-pusher)
+  - [Table of Contents](#table-of-contents)
+  - [Setup](#setup)
+    - [Requirements](#requirements)
+    - [**Setup virtual python development environment**](#setup-virtual-python-development-environment)
+    - [SSL](#ssl)
+  - [Elasticsearch Index](#elasticsearch-index)
+  - [Dashboards](#dashboards)
+  - [Contributors](#contributors)
+
 ## Setup
 
-### Tested with
+### Requirements
 
 - Python >= 3.6.x
+
+For modules see the requirements.txt file
 
 ### **Setup virtual python development environment**
 
@@ -26,7 +41,7 @@ If you are using anaconda install the openssl package:
 conda install -c anaconda openssl
 ```
 
-On linux openssla should be installed as part of the default OS install.
+On linux openssl is installed as part of the default OS install.
 
 ## Elasticsearch Index
 
@@ -79,5 +94,10 @@ PUT /bsm-data
 
 ## Dashboards
 
-From Kibana->Management->Saved Objects
-Run import and select the json file located under the dashboard directory. Thsi will create the index pattern, visualizations, and the dashboard.
+From Kibana -> Management -> Saved Objects
+
+Run import and select the json file located under the dashboard directory. This will create the index pattern, visualizations, and the dashboard.
+
+## Contributors
+
+- Cyrill Illi (cyrill.illi@kineticit.com.au)
