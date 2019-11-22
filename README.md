@@ -32,7 +32,7 @@ On linux openssla should be installed as part of the default OS install.
 
 Index name = bsm-data
 
-The following is the index creation definition in json.  It is used for the ingestion of bsm data,
+The following is the index creation definition in json.  It is used for the ingestion of bsm data.
 
 ```json
 PUT /bsm-data
