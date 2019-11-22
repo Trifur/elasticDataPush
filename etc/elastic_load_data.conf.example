@@ -1,0 +1,22 @@
+[program]
+# timeframe = 960
+timeframe = 500000
+# timeframe = 27993600
+
+[bsm]
+hostname = <bsm hostname>
+username = <bsm user>
+password = <bsm password>
+service = <bsm service name to import>
+
+[elastic]
+hostname = <elastic server name>
+username = <elastic username>
+password = <elastic password>
+port = 9200
+scheme = <https if encryption is used>
+ca_cert = <ssl cert name located in /etc>
+
+[last_value]
+path = var
+file = last_values
